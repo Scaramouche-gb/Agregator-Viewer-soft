@@ -1,0 +1,3 @@
+hydrogram
+tgcrypto>=1.2.5
+PySocks>=1.7.1
