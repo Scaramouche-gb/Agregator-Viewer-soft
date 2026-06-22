@@ -223,48 +223,59 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
                 count += 1
             await asyncio.sleep(random.uniform(3, 7))
 
-            channel_identifier = global_config["channel_identifier"]
-            try:
-                if isinstance(channel_identifier, str) and channel_identifier.startswith('-100'):
-                    chat_id = int(channel_identifier)
-                else:
-                    chat_id = channel_identifier
-            except ValueError:
-                chat_id = channel_identifier
+            channel_identifiers = global_config.get("channel_identifier")
+            if not isinstance(channel_identifiers, list):
+                channel_identifiers = [channel_identifiers]
 
-            chat = None
-            try:
-                chat = await client.get_chat(chat_id)
-            except Exception as e:
-                if "PEER_ID_INVALID" in str(e):
-                    print(f"[!] [{acc_name}] Channel is unknown to session cache. Trying to resolve from dialogs...")
-                    found = False
-                    async for dialog in client.get_dialogs(limit=100):
-                        if dialog.chat.id == chat_id or dialog.chat.username == chat_id:
-                            chat = dialog.chat
-                            found = True
-                            break
-                    if not found:
-                        print(f"[X] [{acc_name}] Channel not found in latest dialogs.")
-                else:
-                    print(f"[X] [{acc_name}] Error resolving channel: {e}")
+            async def process_channel(channel_id):
+                try:
+                    if isinstance(channel_id, str) and channel_id.startswith('-100'):
+                        chat_id = int(channel_id)
+                    else:
+                        chat_id = channel_id
+                except ValueError:
+                    chat_id = channel_id
 
-            if chat:
+                chat = None
+                try:
+                    chat = await client.get_chat(chat_id)
+                except Exception as e:
+                    if "PEER_ID_INVALID" in str(e):
+                        print(f"[!] [{acc_name}] Channel is unknown to session cache. Trying to resolve from dialogs...")
+                        found = False
+                        async for dialog in client.get_dialogs(limit=100):
+                            if dialog.chat.id == chat_id or dialog.chat.username == chat_id:
+                                chat = dialog.chat
+                                found = True
+                                break
+                        if not found:
+                            print(f"[X] [{acc_name}] Channel not found in latest dialogs.")
+                    else:
+                        print(f"[X] [{acc_name}] Error resolving channel {chat_id}: {e}")
+
+                if not chat:
+                    print(f"[X] [{acc_name}] Skipping channel {chat_id} due to access error.")
+                    return
+
                 check_limit = int(global_config.get("check_limit", 60))
                 messages_ids = []
                 async for message in client.get_chat_history(chat.id, limit=check_limit):
                     if message.id:
                         messages_ids.append(message.id)
 
-                if messages_ids:
-                    random.shuffle(messages_ids)
-                    target_peer = await client.resolve_peer(chat.id)
+                if not messages_ids:
+                    print(f"[i] [{acc_name}] No posts found in channel {chat.title or chat_id}.")
+                    return
 
-                    for i in range(0, len(messages_ids), random.randint(2, 5)):
-                        chunk = messages_ids[i:i + 5]
-                        if not chunk:
-                            continue
+                random.shuffle(messages_ids)
+                target_peer = await client.resolve_peer(chat.id)
 
+                for i in range(0, len(messages_ids), random.randint(2, 5)):
+                    chunk = messages_ids[i:i + 5]
+                    if not chunk:
+                        continue
+
+                    try:
                         await client.get_messages(chat.id, chunk)
                         await asyncio.sleep(random.uniform(1, 2))
 
@@ -276,14 +287,17 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
                             )
                         )
                         await client.read_chat_history(chat.id, max_id=max(chunk))
+                    except Exception as e:
+                        print(f"[X] [{acc_name}] Error viewing chunk in channel {chat.title or chat_id}: {e}")
+                        break
 
-                        delay = random.uniform(15, 45)
-                        print(f"    [{acc_name}] Reading chunk of posts... sleeping {delay:.1f} sec.")
-                        await asyncio.sleep(delay)
+                    delay = random.uniform(15, 45)
+                    print(f"    [{acc_name}] [{chat.title or chat_id}] Reading chunk of posts... sleeping {delay:.1f} sec.")
+                    await asyncio.sleep(delay)
 
-                print(f"[V] [{acc_name}] Work complete. Logging out.")
-            else:
-                print(f"[X] [{acc_name}] Skipping viewing due to channel access error.")
+                print(f"[V] [{acc_name}] Channel {chat.title or chat_id} processing complete.")
+
+            await asyncio.gather(*(process_channel(cid) for cid in channel_identifiers))
 
         except FloodWait as e:
             print(f"[X] [{acc_name}] Flood wait error: waiting {e.value} seconds.")
