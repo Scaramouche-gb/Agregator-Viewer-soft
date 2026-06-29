@@ -166,6 +166,7 @@ def get_free_port() -> int:
 async def run_account_lifecycle(session_path: str, account_config: dict, global_config: dict):
     """Individual account lifecycle execution on Hydrogram"""
     acc_name = os.path.basename(session_path).replace('.session', '')
+    settings = global_config.get("settings", global_config)
     
     while True:
         print(f"\n[!] [{acc_name}] Woke up. Starting activity session...")
@@ -182,8 +183,8 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
             if not proxy_settings:
                 print(f"[X] [{acc_name}] Failed to start proxy tunnel. Sleeping until next cycle.")
                 wait_seconds = random.randint(
-                    int(global_config.get("read_interval_min", 7200)),
-                    int(global_config.get("read_interval_max", 21600))
+                    int(settings.get("read_interval_min", 7200)),
+                    int(settings.get("read_interval_max", 21600))
                 )
                 next_run = datetime.now() + timedelta(seconds=wait_seconds)
                 print(f"--- [{acc_name}] Going to sleep. Next run: {next_run.strftime('%H:%M:%S')}")
@@ -198,8 +199,8 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
 
             client = Client(
                 name=acc_name,
-                api_id=int(account_config.get("api_id") or global_config.get("api_id")),
-                api_hash=account_config.get("api_hash") or global_config.get("api_hash"),
+                api_id=int(account_config.get("api_id") or settings.get("api_id")),
+                api_hash=account_config.get("api_hash") or settings.get("api_hash"),
                 workdir=os.path.dirname(session_path),
                 proxy=proxy_settings,
                 device_model=device_name,
@@ -223,7 +224,7 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
                 count += 1
             await asyncio.sleep(random.uniform(3, 7))
 
-            channel_identifiers = global_config.get("channel_identifier")
+            channel_identifiers = settings.get("channel_identifier")
             if not isinstance(channel_identifiers, list):
                 channel_identifiers = [channel_identifiers]
 
@@ -257,7 +258,7 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
                     print(f"[X] [{acc_name}] Skipping channel {chat_id} due to access error.")
                     return
 
-                check_limit = int(global_config.get("check_limit", 60))
+                check_limit = int(settings.get("check_limit", 60))
                 messages_ids = []
                 async for message in client.get_chat_history(chat.id, limit=check_limit):
                     if message.id:
@@ -314,8 +315,8 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
                 tunnel.stop()
 
         wait_seconds = random.randint(
-            int(global_config.get("read_interval_min", 7200)),
-            int(global_config.get("read_interval_max", 21600))
+            int(settings.get("read_interval_min", 7200)),
+            int(settings.get("read_interval_max", 21600))
         )
         next_run = datetime.now() + timedelta(seconds=wait_seconds)
         
