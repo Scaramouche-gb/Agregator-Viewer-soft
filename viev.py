@@ -198,8 +198,8 @@ async def run_account_lifecycle(session_path: str, account_config: dict, global_
 
             client = Client(
                 name=acc_name,
-                api_id=int(global_config["api_id"]),
-                api_hash=global_config["api_hash"],
+                api_id=int(account_config.get("api_id") or global_config.get("api_id")),
+                api_hash=account_config.get("api_hash") or global_config.get("api_hash"),
                 workdir=os.path.dirname(session_path),
                 proxy=proxy_settings,
                 device_model=device_name,
